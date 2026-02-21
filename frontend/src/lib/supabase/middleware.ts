@@ -47,8 +47,8 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
     }
 
-    if (user && request.nextUrl.pathname.startsWith('/login')) {
-        console.log('Middleware: Redirecting authenticated user from /login to /admin')
+    if (user && isAdmin && request.nextUrl.pathname.startsWith('/login')) {
+        console.log('Middleware: Redirecting authenticated admin from /login to /admin')
         const url = request.nextUrl.clone()
         url.pathname = '/admin'
         return NextResponse.redirect(url)
