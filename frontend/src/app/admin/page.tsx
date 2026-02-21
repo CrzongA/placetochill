@@ -48,10 +48,24 @@ export default function AdminDashboard() {
     const [editFormData, setEditFormData] = useState<Partial<Location>>({});
     const [view, setView] = useState<'pending' | 'approved'>('pending');
     const [filterTag, setFilterTag] = useState<string | null>(null);
+    const [globalTags, setGlobalTags] = useState<string[]>([]);
+    const [tagInput, setTagInput] = useState('');
 
     useEffect(() => {
         fetchLocations();
+        fetchGlobalTags();
     }, [view]);
+
+    async function fetchGlobalTags() {
+        const { data, error } = await supabase
+            .from('locations')
+            .select('tags');
+
+        if (!error && data) {
+            const tags = Array.from(new Set(data.flatMap(d => d.tags || []))).sort();
+            setGlobalTags(tags);
+        }
+    }
 
     async function fetchLocations() {
         setLoading(true);
@@ -140,7 +154,24 @@ export default function AdminDashboard() {
             setLocations(locations.map(loc => loc.id === editingId ? { ...loc, ...editFormData } as Location : loc));
             setEditingId(null);
             setEditFormData({});
+            fetchGlobalTags(); // Refresh tags list in case new ones were added
         }
+    };
+
+    const handleAddTag = (e: React.KeyboardEvent | React.MouseEvent) => {
+        if ('key' in e && e.key !== 'Enter') return;
+        e.preventDefault();
+        const tag = tagInput.trim();
+        if (tag && !editFormData.tags?.includes(tag)) {
+            const newTags = [...(editFormData.tags || []), tag];
+            setEditFormData({ ...editFormData, tags: newTags });
+            setTagInput('');
+        }
+    };
+
+    const handleRemoveTag = (tagToRemove: string) => {
+        const newTags = editFormData.tags?.filter(t => t !== tagToRemove) || [];
+        setEditFormData({ ...editFormData, tags: newTags });
     };
 
     const parseCoordinates = (coords: any): { lat: number, lng: number } | null => {
@@ -161,8 +192,9 @@ export default function AdminDashboard() {
         return data.publicUrl;
     };
 
-    // Get unique tags for filtering in approved view
-    const allTags = Array.from(new Set(locations.flatMap(loc => loc.tags || []))).sort();
+    // Get tags for filtering
+    // Use global tags for approved view to show everything recorded
+    const displayTags = view === 'approved' ? globalTags : Array.from(new Set(locations.flatMap(loc => loc.tags || []))).sort();
 
     const filteredLocations = filterTag
         ? locations.filter(loc => loc.tags?.includes(filterTag))
@@ -185,8 +217,8 @@ export default function AdminDashboard() {
                     <button
                         onClick={() => { setView('pending'); setFilterTag(null); }}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${view === 'pending'
-                                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/5'
-                                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                            ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/5'
+                            : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
                             }`}
                     >
                         <div className="flex items-center gap-3">
@@ -201,8 +233,8 @@ export default function AdminDashboard() {
                     <button
                         onClick={() => { setView('approved'); setFilterTag(null); }}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${view === 'approved'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/5'
-                                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/5'
+                            : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
                             }`}
                     >
                         <div className="flex items-center gap-3">
@@ -251,7 +283,7 @@ export default function AdminDashboard() {
                     </Link>
                 </header>
 
-                {view === 'approved' && allTags.length > 0 && (
+                {view === 'approved' && displayTags.length > 0 && (
                     <div className="mb-8">
                         <div className="flex items-center gap-3 mb-4">
                             <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -263,19 +295,19 @@ export default function AdminDashboard() {
                             <button
                                 onClick={() => setFilterTag(null)}
                                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${filterTag === null
-                                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white hover:bg-slate-800'
+                                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                    : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white hover:bg-slate-800'
                                     }`}
                             >
                                 All Places
                             </button>
-                            {allTags.map(tag => (
+                            {displayTags.map(tag => (
                                 <button
                                     key={tag}
                                     onClick={() => setFilterTag(tag === filterTag ? null : tag)}
                                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${tag === filterTag
-                                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                                            : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white hover:bg-slate-800'
+                                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white hover:bg-slate-800'
                                         }`}
                                 >
                                     {tag}
@@ -421,15 +453,62 @@ export default function AdminDashboard() {
                                             <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Tags</h4>
                                             <div className="flex flex-wrap gap-2">
                                                 {editingId === loc.id ? (
-                                                    <input
-                                                        type="text"
-                                                        value={editFormData.tags?.join(', ') || ''}
-                                                        onChange={(e) => setEditFormData({ ...editFormData, tags: e.target.value.split(',').map(t => t.trim()).filter(t => t !== '') })}
-                                                        placeholder="Comma separated tags..."
-                                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                                                    />
+                                                    <div className="space-y-3 w-full">
+                                                        <div className="flex flex-wrap gap-2 mb-2">
+                                                            {editFormData.tags?.map(tag => (
+                                                                <button
+                                                                    key={tag}
+                                                                    onClick={() => handleRemoveTag(tag)}
+                                                                    className="px-2.5 py-1 bg-indigo-500/20 text-indigo-400 rounded-lg text-xs font-medium border border-indigo-500/30 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30 transition-colors flex items-center gap-1.5"
+                                                                    title="Click to remove"
+                                                                >
+                                                                    {tag}
+                                                                    <span>×</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={tagInput}
+                                                                onChange={(e) => setTagInput(e.target.value)}
+                                                                onKeyDown={handleAddTag}
+                                                                placeholder="Add a tag..."
+                                                                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                                            />
+                                                            <button
+                                                                onClick={handleAddTag}
+                                                                className="px-4 py-2 bg-slate-800 text-slate-300 border border-slate-700 rounded-lg hover:bg-slate-700 text-sm font-medium"
+                                                            >
+                                                                Add
+                                                            </button>
+                                                        </div>
+                                                        <div className="mt-4 pb-2">
+                                                            <h5 className="text-[10px] uppercase tracking-widest text-slate-600 font-bold mb-2">Suggested Tags</h5>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {globalTags
+                                                                    .filter(tag => !editFormData.tags?.includes(tag))
+                                                                    .map(tag => (
+                                                                        <button
+                                                                            key={tag}
+                                                                            onClick={() => {
+                                                                                const newTags = [...(editFormData.tags || []), tag];
+                                                                                setEditFormData({ ...editFormData, tags: newTags });
+                                                                            }}
+                                                                            className="px-2 py-0.5 bg-slate-800/50 text-slate-500 rounded-md text-[10px] border border-slate-800 hover:border-indigo-500/30 hover:text-indigo-400 transition-all"
+                                                                        >
+                                                                            + {tag}
+                                                                        </button>
+                                                                    ))
+                                                                }
+                                                                {globalTags.filter(tag => !editFormData.tags?.includes(tag)).length === 0 && (
+                                                                    <span className="text-[10px] text-slate-700 italic">No more suggestions</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 ) : (
-                                                    <>
+                                                    <div className="flex flex-wrap gap-2">
                                                         {loc.tags?.map(tag => (
                                                             <span key={tag} className="px-3 py-1 bg-slate-800 text-slate-400 rounded-lg text-xs font-medium border border-slate-800 group-hover:border-slate-700 group-hover:text-slate-300 transition-colors">
                                                                 {tag}
@@ -438,7 +517,7 @@ export default function AdminDashboard() {
                                                         {(!loc.tags || loc.tags.length === 0) && (
                                                             <span className="text-xs text-slate-600 italic">No tags associated</span>
                                                         )}
-                                                    </>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>

@@ -27,6 +27,24 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [topTags, setTopTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (locations.length > 0) {
+      const tagCounts: Record<string, number> = {};
+      locations.forEach(loc => {
+        loc.tags?.forEach(tag => {
+          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        });
+      });
+
+      const sortedTags = Object.entries(tagCounts)
+        .sort(([, a], [, b]) => b - a)
+        .map(([tag]) => tag);
+
+      setTopTags(sortedTags.slice(0, 15)); // Top 15 tags
+    }
+  }, [locations]);
 
   useEffect(() => {
     fetchLocations();
@@ -137,8 +155,8 @@ export default function Home() {
 
           {/* Floating Filter Bar */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-6 z-10 w-[90%] md:w-auto flex justify-center pointer-events-none">
-            <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 p-2 rounded-2xl shadow-2xl flex items-center gap-2 overflow-x-auto pointer-events-auto max-w-full">
-              {["All", "咖啡廳", "游樂場", "餐廳", "安靜", "有wifi"].map((filter) => (
+            <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 p-2 rounded-2xl shadow-2xl flex items-center gap-2 overflow-x-auto pointer-events-auto max-w-[90vw] no-scrollbar">
+              {["All", ...topTags].map((filter) => (
                 <button
                   key={filter}
                   onClick={() => setActiveFilter(filter)}
