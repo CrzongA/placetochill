@@ -17,17 +17,51 @@ export default function LoginPage() {
         e.preventDefault();
         setLoading(true);
         setError(null);
+        console.log('Login attempt started for:', email);
 
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
+        try {
+            const { data, error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
 
-        if (error) {
-            setError(error.message);
+            if (signInError) {
+                console.error('Sign-in error:', signInError.message);
+                setError(signInError.message);
+                setLoading(false);
+                return;
+            }
+
+            console.log('Sign-in successful, checking user data...');
+
+            // Explicitly get user to check metadata
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+            if (userError || !user) {
+                console.error('User fetch error:', userError?.message || 'No user found');
+                setError('Failed to retrieve user profile.');
+                setLoading(false);
+                return;
+            }
+
+            console.log('User metadata:', user.app_metadata);
+            const isAdmin = !!user.app_metadata?.is_admin;
+
+            if (!isAdmin) {
+                console.warn('User is authenticated but not an admin.');
+                setError('Access denied: You do not have administrator privileges.');
+                // Sign out to clear the unauthorized session
+                await supabase.auth.signOut();
+                setLoading(false);
+            } else {
+                console.log('Admin verified! Redirecting to dashboard...');
+                // Use window.location for a hard redirect to ensure middleware sees the new session cookies
+                window.location.href = '/admin';
+            }
+        } catch (err: any) {
+            console.error('Unexpected login error:', err);
+            setError('An unexpected error occurred. Please try again.');
             setLoading(false);
-        } else {
-            router.push('/admin');
         }
     };
 
