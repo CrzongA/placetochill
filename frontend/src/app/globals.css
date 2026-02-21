@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@import "leaflet/dist/leaflet.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+:root {
+  --background: #0f172a;
+  /* slate-900 */
+  --foreground: #f8fafc;
+  /* slate-50 */
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom leaflet popup overrides for dark mode aesthetic */
+.leaflet-popup-content-wrapper {
+  background: rgba(30, 41, 59, 0.8) !important;
+  /* slate-800 with opacity */
+  backdrop-filter: blur(12px) !important;
+  color: #f8fafc !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3) !important;
+}
+
+.leaflet-popup-tip {
+  background: rgba(30, 41, 59, 0.8) !important;
+}
+
+.leaflet-container {
+  background: #0f172a !important;
+  /* match our background color for tile gaps */
+}
