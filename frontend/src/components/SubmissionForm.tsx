@@ -15,6 +15,22 @@ const DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// Helper to load Google Maps script
+const loadGoogleMapsScript = (callback: () => void) => {
+    if (window.google && window.google.maps) {
+        callback();
+        return;
+    }
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = callback;
+    document.head.appendChild(script);
+};
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
 function MapClickHandler({ onSelect }: { onSelect: (latlng: L.LatLng) => void }) {
     useMapEvents({
         click(e) {
@@ -48,65 +64,85 @@ export default function SubmissionForm() {
     const [tagInput, setTagInput] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
+    const [googleLoaded, setGoogleLoaded] = useState(false);
 
     useEffect(() => {
         setIsMounted(true);
+        loadGoogleMapsScript(() => {
+            setGoogleLoaded(true);
+        });
     }, []);
 
     const handleSearch = async (query: string) => {
-        if (!query) return;
+        if (!query || !googleLoaded) return;
         setIsSearching(true);
         setSearchError(null);
-        console.log('Starting search for:', query);
-
-        const fetchResults = async (q: string, restricted: boolean) => {
-            const url = restricted
-                ? `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&countrycodes=hk`
-                : `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q + ' Hong Kong')}&limit=5`;
-
-            const res = await fetch(url, {
-                headers: {
-                    'Accept-Language': 'zh-HK,en;q=0.9',
-                    'User-Agent': 'WhereToChill-POC-App' // Nominatim policy requirement
-                }
-            });
-            if (!res.ok) throw new Error(`Search failed with status: ${res.status}`);
-            return await res.json();
-        };
+        console.log('Starting Google Places search for:', query);
 
         try {
-            // Attempt 1: Restricted search
-            let data = await fetchResults(query, true);
-            console.log('Attempt 1 (restricted) results:', data);
+            const autocompleteService = new google.maps.places.AutocompleteService();
+            const request = {
+                input: query,
+                componentRestrictions: { country: 'hk' },
+            };
 
-            // Attempt 2: If no results, try broader search with "Hong Kong" appended
-            if (data.length === 0) {
-                console.log('No results found in restricted search. Trying fallback...');
-                data = await fetchResults(query, false);
-                console.log('Attempt 2 (fallback) results:', data);
-            }
-
-            setSearchResults(data);
-            if (data.length === 0) {
-                setSearchError('No results found for this landmark. Try adding more street/district details or clicking manually on the map.');
-            }
+            autocompleteService.getPlacePredictions(request, (predictions, status) => {
+                setIsSearching(false);
+                if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+                    console.log('Google Predictions:', predictions);
+                    setSearchResults(predictions);
+                } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+                    setSearchError('No results found for this landmark in Hong Kong.');
+                    setSearchResults([]);
+                } else if (status === google.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT) {
+                    setSearchError('Search limit exceeded. Please try again later or click the map manually.');
+                    setSearchResults([]);
+                } else if (status === google.maps.places.PlacesServiceStatus.REQUEST_DENIED) {
+                    setSearchError('Search service is currently unavailable (Request Denied).');
+                    setSearchResults([]);
+                } else {
+                    console.error('Autocomplete error status:', status);
+                    setSearchError('Search failed. Please try clicking the map manually.');
+                    setSearchResults([]);
+                }
+            });
         } catch (error: any) {
             console.error('Search error:', error);
-            setSearchError('Failed to search. Please try clicking the map manually.');
-        } finally {
+            setSearchError('An unexpected search error occurred.');
             setIsSearching(false);
         }
     };
 
-    const handleSelectResult = (result: any) => {
-        const lat = parseFloat(result.lat);
-        const lng = parseFloat(result.lon);
-        setCoordinates({ lat, lng });
-        setMapCenter([lat, lng]);
-        setSearchResults([]);
-        if (!formData.landmark) {
-            setFormData({ ...formData, landmark: result.display_name.split(',')[0] });
-        }
+    const handleSelectResult = (prediction: google.maps.places.AutocompletePrediction) => {
+        if (!googleLoaded) return;
+        setSearchError(null);
+
+        const dummyDiv = document.createElement('div');
+        const service = new google.maps.places.PlacesService(dummyDiv);
+
+        service.getDetails({
+            placeId: prediction.place_id,
+            fields: ['name', 'geometry', 'formatted_address']
+        }, (place, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && place && place.geometry && place.geometry.location) {
+                const lat = place.geometry.location.lat();
+                const lng = place.geometry.location.lng();
+
+                setCoordinates({ lat, lng });
+                setMapCenter([lat, lng]);
+                setSearchResults([]);
+                setFormData({
+                    ...formData,
+                    landmark: place.name || prediction.structured_formatting.main_text
+                });
+                console.log('Selected Place Details:', place);
+            } else if (status === google.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT) {
+                setSearchError('Rate limit exceeded fetching details. Please try manual pinning.');
+            } else {
+                console.error('Place details error status:', status);
+                setSearchError(`Failed to fetch location details (Status: ${status}).`);
+            }
+        });
     };
 
     const availableTags = ["咖啡廳", "游樂場", "餐廳", "安靜", "有wifi"];
@@ -230,7 +266,8 @@ export default function SubmissionForm() {
                                     onClick={() => handleSelectResult(result)}
                                     className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white border-b border-slate-700 last:border-0 transition-colors"
                                 >
-                                    {result.display_name}
+                                    <div className="font-bold">{result.structured_formatting.main_text}</div>
+                                    <div className="text-[10px] text-slate-500">{result.structured_formatting.secondary_text}</div>
                                 </button>
                             ))}
                         </div>
