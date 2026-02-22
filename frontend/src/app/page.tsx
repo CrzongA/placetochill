@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Database } from '@/lib/database.types';
+import SocialEmbed from '@/components/SocialEmbed';
 
 type Location = Database['public']['Tables']['locations']['Row'];
 
@@ -70,6 +71,16 @@ export default function Home() {
     ? locations
     : locations.filter(loc => loc.tags?.includes(activeFilter));
 
+  const sortedLocations = selectedLocation
+    ? [selectedLocation, ...filteredLocations.filter(loc => loc.id !== selectedLocation.id)]
+    : filteredLocations;
+
+  const getPublicUrl = (path: string | null) => {
+    if (!path) return null;
+    const { data } = supabase.storage.from('photos').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
   const handleSelectLocation = (loc: Location) => {
     setSelectedLocation(loc);
   };
@@ -122,29 +133,50 @@ export default function Home() {
                 <p className="text-slate-500 text-sm">No spots found. Be the first to submit one!</p>
               </div>
             ) : (
-              filteredLocations.map(loc => (
-                <div
-                  key={loc.id}
-                  onClick={() => handleSelectLocation(loc)}
-                  className={`border rounded-2xl p-5 transition-all cursor-pointer group shadow-lg text-left ${selectedLocation?.id === loc.id
-                    ? 'bg-indigo-500/10 border-indigo-500/50 shadow-indigo-500/10'
-                    : 'bg-slate-800/40 hover:bg-slate-800 border-slate-700/50 hover:shadow-indigo-500/10'
-                    }`}
-                >
-                  <h3 className={`font-bold text-lg transition-colors ${selectedLocation?.id === loc.id ? 'text-indigo-400' : 'text-white group-hover:text-indigo-400'
-                    }`}>
-                    {loc.place_name}
-                  </h3>
-                  <p className="text-sm text-slate-300 mt-2 line-clamp-2 leading-relaxed">{loc.description}</p>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {loc.tags?.map(tag => (
-                      <span key={tag} className="px-2.5 py-1 bg-slate-950/50 text-slate-300 rounded-lg text-xs font-medium border border-slate-800">
-                        {tag}
-                      </span>
-                    ))}
+              sortedLocations.map(loc => {
+                const isSelected = selectedLocation?.id === loc.id;
+                return (
+                  <div
+                    key={loc.id}
+                    onClick={() => handleSelectLocation(loc)}
+                    className={`border rounded-2xl p-5 transition-all duration-300 cursor-pointer group shadow-lg text-left ${isSelected
+                      ? 'bg-indigo-500/10 border-indigo-500/50 shadow-indigo-500/10 ring-1 ring-indigo-500/20 order-first'
+                      : 'bg-slate-800/40 hover:bg-slate-800 border-slate-700/50 hover:shadow-indigo-500/10'
+                      }`}
+                  >
+                    <h3 className={`font-bold text-lg transition-colors ${isSelected ? 'text-indigo-400' : 'text-white group-hover:text-indigo-400'
+                      }`}>
+                      {loc.place_name}
+                    </h3>
+                    <p className={`text-sm text-slate-300 mt-2 leading-relaxed ${isSelected ? '' : 'line-clamp-2'}`}>{loc.description}</p>
+
+                    {isSelected && (
+                      <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-500">
+                        {loc.photo_url && (
+                          <div className="aspect-video w-full rounded-xl overflow-hidden border border-white/5 bg-slate-950/50">
+                            <img
+                              src={getPublicUrl(loc.photo_url) || ''}
+                              alt={loc.place_name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        {loc.social_link && (
+                          <SocialEmbed url={loc.social_link} />
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {loc.tags?.map(tag => (
+                        <span key={tag} className="px-2.5 py-1 bg-slate-950/50 text-slate-300 rounded-lg text-xs font-medium border border-slate-800">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

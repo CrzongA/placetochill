@@ -77,6 +77,7 @@ export type Database = {
                     id: string
                     photo_url: string | null
                     place_name: string
+                    social_link: string | null
                     tags: string[] | null
                     updated_at: string
                 }
@@ -90,6 +91,7 @@ export type Database = {
                     id?: string
                     photo_url?: string | null
                     place_name: string
+                    social_link?: string | null
                     tags?: string[] | null
                     updated_at?: string
                 }
@@ -103,6 +105,7 @@ export type Database = {
                     id?: string
                     photo_url?: string | null
                     place_name?: string
+                    social_link?: string | null
                     tags?: string[] | null
                     updated_at?: string
                 }

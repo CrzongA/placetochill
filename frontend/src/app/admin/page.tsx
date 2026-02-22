@@ -8,6 +8,7 @@ import { Database } from '@/lib/database.types';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import SocialEmbed from '@/components/SocialEmbed';
 
 // Fix Leaflet marker icon issue
 const DefaultIcon = L.icon({
@@ -185,6 +186,7 @@ export default function AdminDashboard() {
         }
         return null;
     };
+
 
     const getPublicUrl = (path: string | null) => {
         if (!path) return null;
@@ -449,6 +451,29 @@ export default function AdminDashboard() {
                                             )}
                                         </div>
 
+                                        <div className="bg-slate-800/20 rounded-xl p-4 border border-slate-800/50">
+                                            <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Social Media Link</h4>
+                                            {editingId === loc.id ? (
+                                                <input
+                                                    type="url"
+                                                    value={editFormData.social_link || ''}
+                                                    onChange={(e) => setEditFormData({ ...editFormData, social_link: e.target.value })}
+                                                    placeholder="Instagram or Threads URL..."
+                                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                                />
+                                            ) : (
+                                                <p className="text-sm text-slate-400 truncate">
+                                                    {loc.social_link ? (
+                                                        <a href={loc.social_link} target="_blank" rel="noopener noreferrer" className="hover:underline text-indigo-400">
+                                                            {loc.social_link}
+                                                        </a>
+                                                    ) : (
+                                                        <span className="italic opacity-50 text-xs">No social link provided</span>
+                                                    )}
+                                                </p>
+                                            )}
+                                        </div>
+
                                         <div>
                                             <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Tags</h4>
                                             <div className="flex flex-wrap gap-2">
@@ -523,18 +548,33 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
 
-                                    {loc.photo_url && (
-                                        <div className="relative group">
-                                            <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Submitted Photo</h4>
-                                            <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-800/30 flex items-center justify-center">
-                                                <img
-                                                    src={getPublicUrl(loc.photo_url) || ''}
-                                                    alt={loc.place_name}
-                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                                />
+                                    <div className="space-y-6">
+                                        {(loc.photo_url || loc.social_link || (editingId === loc.id && editFormData.social_link)) && (
+                                            <div className="space-y-4">
+                                                {loc.photo_url && (
+                                                    <div className="relative group">
+                                                        <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Submitted Photo</h4>
+                                                        <div className="aspect-video w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-800/30 flex items-center justify-center">
+                                                            <img
+                                                                src={getPublicUrl(loc.photo_url) || ''}
+                                                                alt={loc.place_name}
+                                                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {(loc.social_link || (editingId === loc.id && editFormData.social_link)) && (
+                                                    <div className="relative">
+                                                        <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Social Media Embed</h4>
+                                                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar rounded-xl">
+                                                            <SocialEmbed url={editingId === loc.id ? editFormData.social_link || '' : loc.social_link || ''} />
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
 
                                     <div className="md:col-span-2">
                                         <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Location Verification</h4>

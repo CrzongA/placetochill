@@ -53,6 +53,7 @@ export default function SubmissionForm() {
     const [formData, setFormData] = useState({
         landmark: '',
         description: '',
+        social_link: '',
         tags: [] as string[],
     });
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
@@ -198,6 +199,7 @@ export default function SubmissionForm() {
                     tags: formData.tags,
                     approved: false,
                     photo_url: photoPath,
+                    social_link: formData.social_link,
                     // Use WKT format for PostGIS Point
                     coordinates: coordinates ? `POINT(${coordinates.lng} ${coordinates.lat})` : null,
                 });
@@ -318,10 +320,26 @@ export default function SubmissionForm() {
                     )}
                 </div>
 
+                {/* Social Media Link */}
+                <div>
+                    <label htmlFor="social_link" className="block text-sm font-medium text-slate-300 mb-2">
+                        Social Media Link (Instagram Reveal/Post or Threads)
+                    </label>
+                    <input
+                        type="url"
+                        id="social_link"
+                        placeholder="https://www.instagram.com/p/... or https://www.threads.net/@..."
+                        value={formData.social_link}
+                        onChange={(e) => setFormData({ ...formData, social_link: e.target.value })}
+                        className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-500">Optional: If this spot was featured in a reel or post, paste the link here to embed it.</p>
+                </div>
+
                 {/* Description */}
                 <div>
                     <label htmlFor="description" className="block text-sm font-medium text-slate-300 mb-2">
-                        Description *
+                        Tell us more about this spot *
                     </label>
                     <textarea
                         id="description"
