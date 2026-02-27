@@ -1,19 +1,18 @@
 "use client"
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import dynamic from 'next/dynamic';
 
-// Fix Leaflet marker icon issue
-const DefaultIcon = L.icon({
-    iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
+// Dynamically import MapPicker with SSR disabled
+const MapPicker = dynamic(() => import('./MapPicker'), {
+    ssr: false,
+    loading: () => (
+        <div className="h-full w-full flex items-center justify-center bg-slate-800/50">
+            <div className="text-slate-400">Loading map...</div>
+        </div>
+    ),
 });
-L.Marker.prototype.options.icon = DefaultIcon;
 
 // Helper to load Google Maps script
 const loadGoogleMapsScript = (callback: () => void) => {
@@ -28,25 +27,6 @@ const loadGoogleMapsScript = (callback: () => void) => {
     script.onload = callback;
     document.head.appendChild(script);
 };
-
-L.Marker.prototype.options.icon = DefaultIcon;
-
-function MapClickHandler({ onSelect }: { onSelect: (latlng: L.LatLng) => void }) {
-    useMapEvents({
-        click(e) {
-            onSelect(e.latlng);
-        },
-    });
-    return null;
-}
-
-function ChangeView({ center }: { center: [number, number] }) {
-    const map = useMap();
-    useEffect(() => {
-        map.setView(center, 15);
-    }, [center, map]);
-    return null;
-}
 
 export default function SubmissionForm() {
     const router = useRouter();
@@ -288,22 +268,11 @@ export default function SubmissionForm() {
                     </label>
                     <div className="h-[300px] w-full bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden relative z-10">
                         {isMounted && (
-                            <MapContainer
-                                center={mapCenter}
-                                zoom={13}
-                                style={{ height: '100%', width: '100%' }}
-                                zoomControl={false}
-                            >
-                                <TileLayer
-                                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                                />
-                                <MapClickHandler onSelect={setCoordinates} />
-                                <ChangeView center={mapCenter} />
-                                {coordinates && (
-                                    <Marker position={[coordinates.lat, coordinates.lng]} />
-                                )}
-                            </MapContainer>
+                            <MapPicker
+                                mapCenter={mapCenter}
+                                coordinates={coordinates}
+                                onSelect={setCoordinates}
+                            />
                         )}
                         {!coordinates && (
                             <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 pointer-events-none z-20">
