@@ -1,0 +1,257 @@
+# PlaceToChill - Local Testing Stack
+#
+# Starts the full Supabase backend + Next.js frontend.
+#
+# Usage:
+#   docker compose up -d          # start all services
+#   docker compose --profile migrate up migrate  # run DB migrations (one-time)
+#   docker compose logs -f frontend              # tail frontend logs
+#   docker compose down -v                       # tear down + delete data
+#
+# Ports:
+#   3000  - Frontend (Next.js)
+#   54321 - Supabase API (Kong gateway)
+#   54322 - PostgreSQL direct
+#   54323 - Supabase Studio (Dashboard)
+#   54324 - Inbucket (email testing UI)
+#
+# NOTE: The frontend uses NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321.
+#   Client-side (browser) requests work fine. Server-side rendering inside
+#   the container cannot reach localhost:54321 directly. If SSR data fetching
+#   is needed, run the frontend natively instead:
+#     cd frontend && npm install && npm run dev
+#   and remove or stop the frontend service from this compose file.
+
+###
+### Shared values (YAML anchors)
+###
+x-supabase-common: &supabase-common
+  JWT_SECRET: &jwt-secret super-secret-jwt-token-with-at-least-32-characters-long
+  ANON_KEY: &anon-key eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+  SERVICE_ROLE_KEY: &service-role-key eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+  POSTGRES_PASSWORD: &db-password postgres
+
+services:
+  # ─── PostgreSQL (Supabase-flavored) ───────────────────────────────────
+  db:
+    image: supabase/postgres:15.6.1.143
+    restart: unless-stopped
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: *db-password
+      POSTGRES_DB: postgres
+      JWT_SECRET: *jwt-secret
+      JWT_EXP: 3600
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supabase_admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ─── Kong API Gateway ─────────────────────────────────────────────────
+  kong:
+    image: kong:2.8.1
+    restart: unless-stopped
+    ports:
+      - "54321:8000"
+      - "54320:8443"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    volumes:
+      - ./docker/kong.yml:/var/lib/kong/kong.yml:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─── GoTrue (Auth) ────────────────────────────────────────────────────
+  auth:
+    image: supabase/gotrue:v2.158.1
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:54321
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:postgres@db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: ""
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_SECRET: *jwt-secret
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SMTP_HOST: inbucket
+      GOTRUE_SMTP_PORT: "2500"
+      GOTRUE_SMTP_ADMIN_EMAIL: admin@email.com
+      GOTRUE_SMTP_MAX_FREQUENCY: 1s
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ─── PostgREST (REST API) ─────────────────────────────────────────────
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgresql://authenticator:postgres@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: *jwt-secret
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: *jwt-secret
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─── Storage API ──────────────────────────────────────────────────────
+  storage:
+    image: supabase/storage-api:v1.0.6
+    restart: unless-stopped
+    environment:
+      ANON_KEY: *anon-key
+      SERVICE_KEY: *service-role-key
+      POSTGREST_URL: http://rest:3000
+      PGRST_JWT_SECRET: *jwt-secret
+      DATABASE_URL: postgresql://supabase_storage_admin:postgres@db:5432/postgres
+      FILE_SIZE_LIMIT: "52428800"
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      GLOBAL_S3_BUCKET: stub
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+      IMGPROXY_URL: http://imgproxy:5001
+      IS_MULTITENANT: "false"
+    volumes:
+      - storage-data:/var/lib/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+
+  # ─── Supabase Studio (Dashboard UI) ───────────────────────────────────
+  studio:
+    image: supabase/studio:20240514-3e4c21d
+    restart: unless-stopped
+    ports:
+      - "54323:3000"
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: *db-password
+      DEFAULT_ORGANIZATION_NAME: PlaceToChill
+      DEFAULT_PROJECT_NAME: wheretochill
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: http://localhost:54321
+      NEXT_PUBLIC_ENABLE_LOGS: "true"
+      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
+      SUPABASE_ANON_KEY: *anon-key
+      SUPABASE_SERVICE_KEY: *service-role-key
+    depends_on:
+      - meta
+      - kong
+
+  # ─── pg-meta (required by Studio) ─────────────────────────────────────
+  meta:
+    image: supabase/postgres-meta:v0.80.0
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: "8080"
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: supabase_admin
+      PG_META_DB_PASSWORD: *db-password
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─── Inbucket (email testing) ─────────────────────────────────────────
+  inbucket:
+    image: inbucket/inbucket:3.0.4
+    restart: unless-stopped
+    ports:
+      - "54324:9000"   # Web UI
+      - "54325:2500"   # SMTP
+
+  # ─── Database Migrations ──────────────────────────────────────────────
+  # Waits for GoTrue and Storage to create their schemas, then runs
+  # the project SQL migrations.
+  #
+  # Run with: docker compose --profile migrate up migrate
+  migrate:
+    image: postgres:17
+    profiles:
+      - migrate
+    depends_on:
+      auth:
+        condition: service_healthy
+      storage:
+        condition: service_started
+    volumes:
+      - ./supabase/migrations:/migrations:ro
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: *db-password
+      PGDATABASE: postgres
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        echo "Waiting for auth schema (GoTrue migrations)..."
+        until psql -c "SELECT 1 FROM auth.users LIMIT 0" 2>/dev/null; do
+          sleep 2
+        done
+        echo "Waiting for storage schema (Storage API migrations)..."
+        until psql -c "SELECT 1 FROM storage.buckets LIMIT 0" 2>/dev/null; do
+          sleep 2
+        done
+        echo ""
+        echo "Running project migrations..."
+        for f in /migrations/*.sql; do
+          echo "  Applying: $$(basename $$f)"
+          psql -v ON_ERROR_STOP=0 -f "$$f"
+        done
+        echo ""
+        echo "All migrations applied successfully."
+
+  # ─── Frontend (Next.js) ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: *anon-key
+    depends_on:
+      kong:
+        condition: service_started
+
+volumes:
+  db-data:
+  storage-data:
