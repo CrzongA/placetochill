@@ -45,6 +45,7 @@ services:
       JWT_EXP: 3600
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./volumes/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U supabase_admin -d postgres"]
       interval: 5s
@@ -154,7 +155,7 @@ services:
 
   # ─── Supabase Studio (Dashboard UI) ───────────────────────────────────
   studio:
-    image: supabase/studio:20240514-3e4c21d
+    image: supabase/studio:latest
     restart: unless-stopped
     ports:
       - "54323:3000"
