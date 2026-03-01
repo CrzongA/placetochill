@@ -21,15 +21,8 @@
 #   is needed, run the frontend natively instead:
 #     cd frontend && npm install && npm run dev
 #   and remove or stop the frontend service from this compose file.
-
-###
-### Shared values (YAML anchors)
-###
-x-supabase-common: &supabase-common
-  JWT_SECRET: &jwt-secret super-secret-jwt-token-with-at-least-32-characters-long
-  ANON_KEY: &anon-key eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-  SERVICE_ROLE_KEY: &service-role-key eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-  POSTGRES_PASSWORD: &db-password postgres
+#
+# All secrets and keys are read from the .env file in this directory.
 
 services:
   # ─── PostgreSQL (Supabase-flavored) ───────────────────────────────────
@@ -39,13 +32,13 @@ services:
     ports:
       - "54322:5432"
     environment:
-      POSTGRES_PASSWORD: *db-password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
-      JWT_SECRET: *jwt-secret
+      JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: 3600
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./volumes/db/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U supabase_admin -d postgres"]
       interval: 5s
@@ -81,7 +74,7 @@ services:
       GOTRUE_API_PORT: 9999
       API_EXTERNAL_URL: http://localhost:54321
       GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:postgres@db:5432/postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
       GOTRUE_SITE_URL: http://localhost:3000
       GOTRUE_URI_ALLOW_LIST: ""
       GOTRUE_DISABLE_SIGNUP: "false"
@@ -89,7 +82,7 @@ services:
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_JWT_EXP: "3600"
-      GOTRUE_JWT_SECRET: *jwt-secret
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "true"
       GOTRUE_SMTP_HOST: inbucket
@@ -115,12 +108,12 @@ services:
     image: postgrest/postgrest:v12.2.3
     restart: unless-stopped
     environment:
-      PGRST_DB_URI: postgresql://authenticator:postgres@db:5432/postgres
+      PGRST_DB_URI: postgresql://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
       PGRST_DB_SCHEMAS: public,graphql_public
       PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: *jwt-secret
+      PGRST_JWT_SECRET: ${JWT_SECRET}
       PGRST_DB_USE_LEGACY_GUCS: "false"
-      PGRST_APP_SETTINGS_JWT_SECRET: *jwt-secret
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
       PGRST_APP_SETTINGS_JWT_EXP: "3600"
     depends_on:
       db:
@@ -131,11 +124,11 @@ services:
     image: supabase/storage-api:v1.0.6
     restart: unless-stopped
     environment:
-      ANON_KEY: *anon-key
-      SERVICE_KEY: *service-role-key
+      ANON_KEY: ${SUPABASE_ANON_KEY}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       POSTGREST_URL: http://rest:3000
-      PGRST_JWT_SECRET: *jwt-secret
-      DATABASE_URL: postgresql://supabase_storage_admin:postgres@db:5432/postgres
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgresql://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/postgres
       FILE_SIZE_LIMIT: "52428800"
       STORAGE_BACKEND: file
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
@@ -161,15 +154,15 @@ services:
       - "54323:3000"
     environment:
       STUDIO_PG_META_URL: http://meta:8080
-      POSTGRES_PASSWORD: *db-password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DEFAULT_ORGANIZATION_NAME: PlaceToChill
       DEFAULT_PROJECT_NAME: wheretochill
       SUPABASE_URL: http://kong:8000
       SUPABASE_PUBLIC_URL: http://localhost:54321
       NEXT_PUBLIC_ENABLE_LOGS: "true"
       NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
-      SUPABASE_ANON_KEY: *anon-key
-      SUPABASE_SERVICE_KEY: *service-role-key
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     depends_on:
       - meta
       - kong
@@ -184,7 +177,7 @@ services:
       PG_META_DB_PORT: "5432"
       PG_META_DB_NAME: postgres
       PG_META_DB_USER: supabase_admin
-      PG_META_DB_PASSWORD: *db-password
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
       db:
         condition: service_healthy
@@ -217,7 +210,7 @@ services:
       PGHOST: db
       PGPORT: "5432"
       PGUSER: postgres
-      PGPASSWORD: *db-password
+      PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: postgres
     entrypoint: ["bash", "-c"]
     command:
@@ -248,7 +241,18 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: *anon-key
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+      # Enable polling so Next.js detects file changes through Docker on Windows
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      # Mount source so edits on the host are visible inside the container
+      - ./frontend:/app
+      # Keep the container's node_modules isolated from the host
+      - /app/node_modules
+      - /app/.next
     depends_on:
       kong:
         condition: service_started
