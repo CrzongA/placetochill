@@ -16,7 +16,7 @@ const MapPicker = dynamic(() => import('./MapPicker'), {
 
 // Helper to load Google Maps script
 const loadGoogleMapsScript = (callback: () => void) => {
-    if (window.google && window.google.maps) {
+    if (typeof google !== 'undefined' && google.maps) {
         callback();
         return;
     }

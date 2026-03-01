@@ -55,8 +55,9 @@ export default function LoginPage() {
                 setLoading(false);
             } else {
                 console.log('Admin verified! Redirecting to dashboard...');
-                // Use window.location for a hard redirect to ensure middleware sees the new session cookies
-                window.location.href = '/admin';
+                // Refresh server state so middleware picks up the new session cookies, then navigate
+                router.refresh();
+                router.push('/admin');
             }
         } catch (err: any) {
             console.error('Unexpected login error:', err);
@@ -69,7 +70,7 @@ export default function LoginPage() {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
             },
         });
 
