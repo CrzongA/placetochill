@@ -67,7 +67,17 @@ export default function SubmissionForm() {
                 componentRestrictions: { country: 'hk' },
             };
 
+            // Add an internal timeout to catch cases where Google API hangs
+            const timeoutId = setTimeout(() => {
+                if (isSearching) {
+                    console.error('Google Places API search timed out after 15s');
+                    setIsSearching(false);
+                    setSearchError('Search timed out. Google Maps service might be slow. Please try again or click the map manually.');
+                }
+            }, 15000);
+
             autocompleteService.getPlacePredictions(request, (predictions, status) => {
+                clearTimeout(timeoutId);
                 setIsSearching(false);
                 if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
                     console.log('Google Predictions:', predictions);
@@ -222,11 +232,13 @@ export default function SubmissionForm() {
                                 }
                             }}
                             className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all pr-12"
+                            data-testid="landmark-input"
                         />
                         <button
                             type="button"
+                            disabled={!googleLoaded || isSearching}
                             onClick={() => handleSearch(formData.landmark)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white transition-colors"
+                            className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white transition-colors ${(!googleLoaded || isSearching) ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title="Search landmark"
                         >
                             {isSearching ? (
@@ -240,7 +252,10 @@ export default function SubmissionForm() {
                     </div>
 
                     {searchResults.length > 0 && (
-                        <div className="mt-2 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-xl z-20 relative">
+                        <div 
+                            className="mt-2 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-xl z-20 relative"
+                            data-testid="search-results"
+                        >
                             {searchResults.map((result, i) => (
                                 <button
                                     key={i}
