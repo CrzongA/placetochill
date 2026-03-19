@@ -40,29 +40,46 @@ cd frontend
 npm install
 ```
 
-### 3. Local Supabase Setup
+### 3. Environment Configuration
+
+Copy the template file to create your local environment variables:
+
 ```bash
-# From the project root
-npx supabase start
-
-# The CLI will provide your local environment variables:
-# NEXT_PUBLIC_SUPABASE_URL
-# NEXT_PUBLIC_SUPABASE_ANON_KEY
+cp .env.template .env
 ```
 
-### 4. Frontend Configuration
-Create a `frontend/.env.local` file and add the credentials provided by the Supabase CLI:
-```env
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-```
+Open `.env` and fill in the values. **Crucially, you must initialize the JWT tokens and secrets**:
 
-### 5. Running the App
+1.  **JWT_SECRET**: Generate a secure 32+ character string using `openssl rand -base64 32`. This secret is used to sign all auth tokens.
+2.  **SUPABASE_ANON_KEY** & **SUPABASE_SERVICE_ROLE_KEY**: These are not random strings; they are JWTs signed with your `JWT_SECRET`. You can generate them at [jwt.io](https://jwt.io) (Algorithm: HS256) with these payloads:
+    -   **Anon Key Payload**: `{ "role": "anon", "iss": "supabase" }`
+    -   **Service Role Key Payload**: `{ "role": "service_role", "iss": "supabase" }`
+    -   **Secret**: Use your `JWT_SECRET` value in the "Verify Signature" section.
+3.  **POSTGRES_PASSWORD**: Set a secure password for the database.
+
+### 4. Running the Stack (Docker Compose)
+
+The entire stack (Supabase backend + Next.js frontend) can be started with a single command:
+
 ```bash
-cd frontend
-npm run dev
+# Start all services (Database, Auth, API, Gateway, Studio, Frontend)
+docker compose up -d
+
+# Run database migrations (Required on first launch or schema updates)
+docker compose --profile migrate up migrate
 ```
-Open [http://localhost:3000](http://localhost:3000) to see the application.
+
+### 5. Accessing the Application
+
+Once the containers are running, you can access the following services:
+
+-   **Frontend**: [http://localhost:3000](http://localhost:3000)
+-   **Supabase Studio (Dashboard)**: [http://localhost:54323](http://localhost:54323)
+-   **Email Testing UI (Inbucket)**: [http://localhost:54324](http://localhost:54324)
+-   **Database**: `localhost:54322` (User: `postgres`, Password: your `.env` value)
+
+> [!TIP]
+> To view logs for the frontend, use `docker compose logs -f frontend`. To tear down the stack and delete all data, use `docker compose down -v`.
 
 ## 🛡️ Security
 
