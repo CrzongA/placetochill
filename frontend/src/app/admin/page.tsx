@@ -2,41 +2,24 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { Database } from '@/lib/database.types';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import SocialEmbed from '@/components/SocialEmbed';
 
-// Fix Leaflet marker icon issue
-const DefaultIcon = L.icon({
-    iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-});
-L.Marker.prototype.options.icon = DefaultIcon;
-
-function MapClickHandler({ onSelect }: { onSelect: (latlng: L.LatLng) => void }) {
-    useMapEvents({
-        click(e) {
-            onSelect(e.latlng);
-        },
-    });
-    return null;
-}
-
-function ChangeView({ center }: { center: [number, number] }) {
-    const map = useMap();
-    useEffect(() => {
-        if (center[0] !== 0 && center[1] !== 0) {
-            map.setView(center, 15);
-        }
-    }, [center, map]);
-    return null;
-}
+// Dynamically import the AdminMap component to avoid SSR issues with Leaflet
+const AdminMap = dynamic(
+    () => import('@/components/AdminMapComponents'),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="w-full h-full flex items-center justify-center bg-slate-800/50">
+                <div className="text-slate-500 text-sm">Loading map...</div>
+            </div>
+        )
+    }
+);
 
 type Location = Database['public']['Tables']['locations']['Row'];
 
@@ -77,7 +60,7 @@ export default function AdminDashboard() {
             .order('created_at', { ascending: false });
 
         if (error) {
-            console.error('Error fetching locations:', error);
+            console.error('Error fetching locations:', error?.message || error);
         } else {
             setLocations(data || []);
         }
@@ -579,29 +562,14 @@ export default function AdminDashboard() {
                                     <div className="md:col-span-2">
                                         <h4 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Location Verification</h4>
                                         <div className="h-[250px] w-full bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden relative z-10 transition-shadow hover:shadow-2xl">
-                                            <MapContainer
-                                                center={parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates) ? [parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates)!.lat, parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates)!.lng] : [22.3193, 114.1694]}
-                                                zoom={15}
-                                                style={{ height: '100%', width: '100%' }}
-                                                zoomControl={false}
-                                            >
-                                                <TileLayer
-                                                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                                                    attribution='&copy; CARTO'
-                                                />
-                                                {editingId === loc.id && (
-                                                    <MapClickHandler onSelect={(latlng) => setEditFormData({
-                                                        ...editFormData,
-                                                        coordinates: `POINT(${latlng.lng} ${latlng.lat})`
-                                                    })} />
-                                                )}
-                                                {parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates) && (
-                                                    <>
-                                                        <Marker position={[parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates)!.lat, parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates)!.lng]} />
-                                                        <ChangeView center={[parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates)!.lat, parseCoordinates(editingId === loc.id ? editFormData.coordinates : loc.coordinates)!.lng]} />
-                                                    </>
-                                                )}
-                                            </MapContainer>
+                                            <AdminMap
+                                                coordinates={editingId === loc.id ? editFormData.coordinates : loc.coordinates}
+                                                editingId={editingId === loc.id ? editingId : null}
+                                                onMapClick={(latlng) => setEditFormData({
+                                                    ...editFormData,
+                                                    coordinates: `POINT(${latlng.lng} ${latlng.lat})`
+                                                })}
+                                            />
                                             {editingId === loc.id && (
                                                 <div className="absolute top-2 right-2 z-20 bg-indigo-500 text-white text-[10px] px-2 py-1 rounded font-bold uppercase tracking-tighter shadow-lg">
                                                     Click map to relocate

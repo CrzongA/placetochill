@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import dynamic from 'next/dynamic';
 
 // Dynamically import MapPicker with SSR disabled
@@ -16,19 +16,33 @@ const MapPicker = dynamic(() => import('./MapPicker'), {
 
 // Helper to load Google Maps script
 const loadGoogleMapsScript = (callback: () => void) => {
+    // Check if Google Maps is already loaded
     if (typeof google !== 'undefined' && google.maps) {
         callback();
         return;
     }
+
+    // Check if script is already being loaded
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+        // Script is already in DOM, wait for it to load
+        existingScript.addEventListener('load', callback);
+        return;
+    }
+
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
     script.async = true;
     script.defer = true;
     script.onload = callback;
+    script.onerror = () => {
+        console.error('Failed to load Google Maps API');
+    };
     document.head.appendChild(script);
 };
 
 export default function SubmissionForm() {
+    const supabase = createClient();
     const router = useRouter();
     const [formData, setFormData] = useState({
         landmark: '',
@@ -56,6 +70,13 @@ export default function SubmissionForm() {
 
     const handleSearch = async (query: string) => {
         if (!query || !googleLoaded) return;
+
+        // Double-check that google.maps is actually available
+        if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+            setSearchError('Google Maps is still loading. Please wait a moment and try again.');
+            return;
+        }
+
         setIsSearching(true);
         setSearchError(null);
         console.log('Starting Google Places search for:', query);
@@ -106,6 +127,13 @@ export default function SubmissionForm() {
 
     const handleSelectResult = (prediction: google.maps.places.AutocompletePrediction) => {
         if (!googleLoaded) return;
+
+        // Double-check that google.maps is actually available
+        if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+            setSearchError('Google Maps is still loading. Please wait a moment and try again.');
+            return;
+        }
+
         setSearchError(null);
 
         const dummyDiv = document.createElement('div');
