@@ -8,21 +8,25 @@
 #   docker compose logs -f frontend              # tail frontend logs
 #   docker compose down -v                       # tear down + delete data
 #
-# Ports:
+# Ports (see .env file for URL configuration):
 #   3000  - Frontend (Next.js)
 #   54321 - Supabase API (Kong gateway)
 #   54322 - PostgreSQL direct
 #   54323 - Supabase Studio (Dashboard)
 #   54324 - Inbucket (email testing UI)
+#   54325 - Inbucket (SMTP)
 #
-# NOTE: The frontend uses NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321.
+# Configuration:
+#   All service URLs, ports, and secrets are defined in the .env file.
+#   The frontend uses NEXT_PUBLIC_SUPABASE_URL (default: http://127.0.0.1:54321)
+#   to avoid IPv4/IPv6 localhost resolution issues.
+#
+# Note on SSR:
 #   Client-side (browser) requests work fine. Server-side rendering inside
 #   the container cannot reach localhost:54321 directly. If SSR data fetching
 #   is needed, run the frontend natively instead:
 #     cd frontend && npm install && npm run dev
 #   and remove or stop the frontend service from this compose file.
-#
-# All secrets and keys are read from the .env file in this directory.
 
 services:
   # ─── PostgreSQL (Supabase-flavored) ───────────────────────────────────
@@ -81,10 +85,10 @@ services:
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: http://localhost:54321
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
-      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_SITE_URL: ${GOTRUE_SITE_URL}
       GOTRUE_URI_ALLOW_LIST: ""
       GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_JWT_ADMIN_ROLES: service_role
@@ -166,7 +170,7 @@ services:
       DEFAULT_ORGANIZATION_NAME: PlaceToChill
       DEFAULT_PROJECT_NAME: wheretochill
       SUPABASE_URL: http://kong:8000
-      SUPABASE_PUBLIC_URL: http://localhost:54321
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
       NEXT_PUBLIC_ENABLE_LOGS: "true"
       NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
@@ -250,7 +254,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
